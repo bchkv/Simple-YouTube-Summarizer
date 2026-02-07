@@ -1,13 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="fa08cbae-c9e2-4ee0-8711-ede104619c6e" name="Changes" comment="Simplify project structure">
-      <change afterPath="$PROJECT_DIR$/.idea/Simple-YouTube-Summarizer.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-    </list>
+    <list default="true" id="fa08cbae-c9e2-4ee0-8711-ede104619c6e" name="Changes" comment="Define MVP and scaffold minimal project structure" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -69,11 +63,28 @@
       <option name="project" value="LOCAL" />
       <updated>1770482427601</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="Define MVP and scaffold minimal project structure">
+      <option name="closed" value="true" />
+      <created>1770482758816</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1770482758816</updated>
+    </task>
+    <task id="LOCAL-00003" summary="Define MVP and scaffold minimal project structure">
+      <option name="closed" value="true" />
+      <created>1770482765026</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1770482765026</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Simplify project structure" />
-    <option name="LAST_COMMIT_MESSAGE" value="Simplify project structure" />
+    <MESSAGE value="Define MVP and scaffold minimal project structure" />
+    <option name="LAST_COMMIT_MESSAGE" value="Define MVP and scaffold minimal project structure" />
   </component>
 </project>
