@@ -1,14 +1,12 @@
 Free, fast, simple YouTube summaries on macOS.
 
-Uses: `yt-dlp` (captions) → macOS Shortcuts → ChatGPT app.
-
 ## Workflow
-URL → captions → text → Shortcut → summary
+URL → fetch captions with 'yt-dlp'→ text → Shortcut → summary in ChatGPT app
 
 ## Requirements
 - macOS
 - ChatGPT macOS app
-- A Shortcut named `YT Summarize` (receives text input)
+- A Shortcut named `YT Summarize` (install manually from ./Shortcuts)
 - `yt-dlp` installed (`brew install yt-dlp`)
 
 ## Usage
