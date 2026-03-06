@@ -3,11 +3,15 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
+import os
 
 from openai import OpenAI
 
+load_dotenv()
+
 # -------------------- CONFIG --------------------
-YTDLP = "/Users/bochkovoy/.local/bin/yt-dlp"
+YTDLP = "YTDLP = 'yt-dlp'"
 
 CHUNK_MODEL = "gpt-4o-mini"
 FINAL_MODEL = "gpt-5-mini"
