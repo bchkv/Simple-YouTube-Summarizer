@@ -1,0 +1,5 @@
+*.vtt
+*.txt
+!requirements.txt
+
+.idea/

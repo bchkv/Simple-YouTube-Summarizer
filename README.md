@@ -1,8 +1,12 @@
-Free, fast, simple YouTube summaries on macOS.
+## Purpose
 
-Uses: `yt-dlp` (captions) → macOS Shortcuts → ChatGPT app.
+Get YouTube video summaries. 
 
+**Under a cent per video.**
 
 ## Usage
+
+Run
+
 ```bash
-./yt-summarize "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+./yt-summarize "YouTube URL"

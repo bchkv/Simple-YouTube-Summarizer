@@ -104,7 +104,7 @@ def finalize_summary(part_summaries: list[str]) -> str:
                 ),
             },
         ],
-        temperature=1,
+        temperature=1   ,
     )
     return resp.choices[0].message.content.strip()
 
