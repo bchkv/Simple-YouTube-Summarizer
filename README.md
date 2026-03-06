@@ -1,8 +1,6 @@
 ## Purpose
 
-Get YouTube video summaries. 
-
-**Under a cent per video.**
+Get YouTube video summaries for **umder a cent per video.**
 
 ## Usage
 
