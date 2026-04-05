@@ -10,19 +10,31 @@ Install dependencies:
 
 Edit `.env` adding your OpenAI's API key
 
-Run
+Install the package (optional; adds the `summarize` command):
 
 ```bash
-./yt-summarize "YouTube URL"
+pip install -e .
 ```
+
+Run (from the repo root, after `pip install -r requirements.txt`):
+
+```bash
+python main.py "YouTube URL or path/to/file.txt"
+```
+
+Or, if you ran `pip install -e .`:
+
+```bash
+summarize "YouTube URL or path/to/file.txt"
+```
+
+Use `-o out.txt` to choose the output file (default: `summary.txt`).
 
 ## What it does
 
-- downloads subtitles from a YouTube video with `yt-dlp`
-- cleans and extracts transcript text from `.vtt`
-- splits long transcripts into chunks
-- summarizes each chunk
-- produces one final structured summary
+- **YouTube:** downloads subtitles with `yt-dlp`, cleans `.vtt` to plain text
+- **Text file:** reads a local UTF-8 file (e.g. `.txt`, `.md`)
+- splits long text into chunks, summarizes each chunk, then merges into one structured summary
 
 ## Requirements
 
