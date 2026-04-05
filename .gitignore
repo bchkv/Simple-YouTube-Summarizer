@@ -1,5 +1,7 @@
 *.vtt
 *.txt
+*.wav
+
 !requirements.txt
 
 .idea/

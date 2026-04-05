@@ -13,6 +13,12 @@ class Settings:
     chunk_chars: int = 9000
     summary_file: str = "summary.txt"
     transcript_glob: str = "transcript*.vtt"
+    # Local speech-to-text (see summarizer.transcription.factory)
+    transcription_backend: str = "mlx_whisper"
+    whisper_model: str = "mlx-community/whisper-tiny"
+    transcribe_language: str | None = None
+    # YouTube: False = captions via yt-dlp; True = download audio + local STT
+    youtube_local_transcribe: bool = False
 
 
 DEFAULT_SETTINGS = Settings()

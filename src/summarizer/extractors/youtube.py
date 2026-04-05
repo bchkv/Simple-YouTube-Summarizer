@@ -1,11 +1,22 @@
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
 from summarizer.config import Settings
+from summarizer.transcription.factory import transcribe_local_media
+
+
+_YT_HTTP_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/123.0.0.0 Safari/537.36"
+    )
+}
 
 
 def vtt_to_text(path: str) -> str:
@@ -49,13 +60,7 @@ def download_subtitles(url: str, lang: str, transcript_glob: str) -> Path | None
         "outtmpl": "transcript.%(ext)s",
         "noplaylist": True,
         "quiet": False,
-        "http_headers": {
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/123.0.0.0 Safari/537.36"
-            )
-        },
+        "http_headers": _YT_HTTP_HEADERS,
     }
 
     try:
@@ -71,11 +76,38 @@ def download_subtitles(url: str, lang: str, transcript_glob: str) -> Path | None
     return _find_vtt_file(transcript_glob)
 
 
+def download_youtube_audio(url: str, dest_dir: Path) -> Path:
+    """Download best-effort audio into dest_dir; return path to the media file."""
+    stem = dest_dir / "audio"
+    ydl_opts = {
+        "format": "bestaudio[ext=m4a]/bestaudio/best",
+        "outtmpl": str(stem) + ".%(ext)s",
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "http_headers": _YT_HTTP_HEADERS,
+    }
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+    except DownloadError as e:
+        raise RuntimeError(f"YouTube audio download failed: {e}") from e
+    candidates = sorted(dest_dir.glob("audio.*"))
+    if not candidates:
+        raise RuntimeError("yt-dlp did not produce an audio file.")
+    return candidates[0]
+
+
 class YouTubeExtractor:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
     def extract(self, url: str) -> str:
+        if self._settings.youtube_local_transcribe:
+            with tempfile.TemporaryDirectory() as tmp:
+                audio_path = download_youtube_audio(url, Path(tmp))
+                return transcribe_local_media(audio_path.resolve(), self._settings)
+
         vtt_path = download_subtitles(
             url,
             self._settings.sub_lang,
