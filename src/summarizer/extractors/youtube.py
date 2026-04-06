@@ -17,6 +17,24 @@ _YT_HTTP_HEADERS = {
         "Chrome/123.0.0.0 Safari/537.36"
     )
 }
+_YT_JS_RUNTIMES = {"node": {}, "deno": {}}
+_YT_REMOTE_COMPONENTS = ["ejs:github"]
+
+
+def _subtitle_lang_candidates(lang: str) -> list[list[str]]:
+    raw = (lang or "").strip()
+    base = raw.split("-")[0] if raw else ""
+    candidates: list[list[str]] = []
+
+    for langs in (
+        [raw] if raw else [],
+        [f"{base}.*"] if base else [],
+        ["en", "en.*"] if base != "en" else [],
+        ["all", "-live_chat"],
+    ):
+        if langs and langs not in candidates:
+            candidates.append(langs)
+    return candidates
 
 
 def vtt_to_text(path: str) -> str:
@@ -51,29 +69,35 @@ def _find_vtt_file(glob_pattern: str) -> Path | None:
 def download_subtitles(url: str, lang: str, transcript_glob: str) -> Path | None:
     _cleanup_transcripts(transcript_glob)
 
-    ydl_opts = {
-        "skip_download": True,
-        "writesubtitles": True,
-        "writeautomaticsub": True,
-        "subtitleslangs": [lang],
-        "subtitlesformat": "vtt",
-        "outtmpl": "transcript.%(ext)s",
-        "noplaylist": True,
-        "quiet": False,
-        "http_headers": _YT_HTTP_HEADERS,
-    }
+    for langs in _subtitle_lang_candidates(lang):
+        ydl_opts = {
+            "skip_download": True,
+            "writesubtitles": True,
+            "writeautomaticsub": True,
+            "subtitleslangs": langs,
+            "subtitlesformat": "vtt",
+            "outtmpl": "transcript.%(ext)s",
+            "noplaylist": True,
+            "quiet": False,
+            "http_headers": _YT_HTTP_HEADERS,
+            "js_runtimes": _YT_JS_RUNTIMES,
+            "remote_components": _YT_REMOTE_COMPONENTS,
+        }
+        try:
+            with YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+        except DownloadError as e:
+            print(f"Subtitle download failed for {langs}: {e}", file=sys.stderr)
+            continue
+        except Exception as e:
+            print(f"Unexpected subtitle download error for {langs}: {e}", file=sys.stderr)
+            continue
 
-    try:
-        with YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-    except DownloadError as e:
-        print(f"Subtitle download failed: {e}", file=sys.stderr)
-        return None
-    except Exception as e:
-        print(f"Unexpected subtitle download error: {e}", file=sys.stderr)
-        return None
+        vtt = _find_vtt_file(transcript_glob)
+        if vtt:
+            return vtt
 
-    return _find_vtt_file(transcript_glob)
+    return None
 
 
 def download_youtube_audio(url: str, dest_dir: Path) -> Path:
@@ -86,6 +110,8 @@ def download_youtube_audio(url: str, dest_dir: Path) -> Path:
         "no_warnings": True,
         "noplaylist": True,
         "http_headers": _YT_HTTP_HEADERS,
+        "js_runtimes": _YT_JS_RUNTIMES,
+        "remote_components": _YT_REMOTE_COMPONENTS,
     }
     try:
         with YoutubeDL(ydl_opts) as ydl:

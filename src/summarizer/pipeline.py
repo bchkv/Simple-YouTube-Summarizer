@@ -12,6 +12,17 @@ def _get_client() -> OpenAI:
     return _client
 
 
+def _chat_create(client: OpenAI, model: str, messages: list[dict], temperature: float):
+    kwargs = {
+        "model": model,
+        "messages": messages,
+    }
+    # GPT-5 chat models currently only accept default temperature behavior.
+    if not model.startswith("gpt-5"):
+        kwargs["temperature"] = temperature
+    return client.chat.completions.create(**kwargs)
+
+
 def smart_chunk(text: str, limit: int) -> list[str]:
     chunks: list[str] = []
     t = text.strip()
@@ -34,9 +45,7 @@ def smart_chunk(text: str, limit: int) -> list[str]:
 
 def summarize_chunk(chunk: str, settings: Settings = DEFAULT_SETTINGS) -> str:
     client = _get_client()
-    resp = client.chat.completions.create(
-        model=settings.chunk_model,
-        messages=[
+    messages = [
             {
                 "role": "system",
                 "content": (
@@ -56,9 +65,8 @@ def summarize_chunk(chunk: str, settings: Settings = DEFAULT_SETTINGS) -> str:
                     f"CHUNK:\n{chunk}"
                 ),
             },
-        ],
-        temperature=0.2,
-    )
+        ]
+    resp = _chat_create(client, settings.chunk_model, messages, temperature=0.2)
 
     content = resp.choices[0].message.content
     return content.strip() if content else ""
@@ -74,31 +82,27 @@ def finalize_summary(
         for i, summ in enumerate(part_summaries)
     )
 
-    resp = client.chat.completions.create(
-        model=settings.final_model,
-        messages=[
+    messages = [
             {
                 "role": "system",
                 "content": (
-                    "You produce clear, technically accurate synthesis. "
+                    "You produce clear, accurate summaries. "
                     "Avoid speculation."
                 ),
             },
             {
                 "role": "user",
                 "content": (
-                    "Combine these part-summaries into a final technical summary with:\n"
-                    "1) Overview (3–6 sentences)\n"
-                    "2) Technical breakdown (sections with headings)\n"
-                    "3) Key parameters / numbers / equations mentioned (if any)\n"
-                    "4) Assumptions, limitations, trade-offs\n"
-                    "5) Practical takeaways / recommended actions (if any)\n\n"
+                    "Combine these part-summaries into one clean, regular summary.\n"
+                    "Write 2-4 short paragraphs in plain language.\n"
+                    "If useful, end with up to 3 concise bullet points for key takeaways.\n"
+                    "Do not add section headings.\n"
+                    "Do not add follow-up questions, offers, or extra commentary.\n\n"
                     f"{combined}"
                 ),
             },
-        ],
-        temperature=0.7,
-    )
+        ]
+    resp = _chat_create(client, settings.final_model, messages, temperature=0.7)
 
     content = resp.choices[0].message.content
     return content.strip() if content else ""

@@ -22,7 +22,7 @@ pip install -e .
 pip install -e ".[local-transcribe]"
 ```
 
-You need **`ffmpeg`** on your `PATH` (used to decode media). The first run may download model weights from Hugging Face.
+You need `**ffmpeg**` on your `PATH` (used to decode media). The first run may download model weights from Hugging Face.
 
 Run (from the repo root, after `pip install -r requirements.txt`):
 
@@ -36,7 +36,7 @@ Or, if you ran `pip install -e .`:
 summarize "YouTube URL or path/to/file.txt"
 ```
 
-Use `-o out.txt` to choose the output file (default: `summary.txt`).
+The final summary goes to **stdout** (progress logs go to stderr). Use `-o out.txt` to write to a file instead (`-o -` is stdout explicitly).
 
 **Local transcription flags** (audio/video inputs only):
 
@@ -62,3 +62,23 @@ Example `.env`:
 
 ```env
 OPENAI_API_KEY=your_api_key_here
+```
+
+## Troubleshooting: wrong Python environment
+
+If you see `ModuleNotFoundError` for packages from `requirements.txt` (for example `openai` or `dotenv`) even after activating `venv`, your shell may be using `pyenv` shims instead of this repo's virtualenv.
+
+Recreate the venv and reinstall in this project:
+
+```bash
+deactivate 2>/dev/null || true
+rm -rf venv
+python3 -m venv venv
+source venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -c "import sys; print(sys.executable)"
+```
+
+The printed executable should be:
+`/Users/bochkovoy/Projects/Summarizer/venv/bin/python`

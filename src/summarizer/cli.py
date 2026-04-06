@@ -3,7 +3,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from summarizer.config import DEFAULT_SETTINGS, Settings
+from summarizer.config import Settings
 from summarizer.pipeline import finalize_summary, smart_chunk, summarize_chunk
 from summarizer.routing import SourceKind, detect_source_kind, extractor_for
 
@@ -24,7 +24,10 @@ def main(argv: list[str] | None = None) -> int:
         "--output",
         metavar="FILE",
         default=None,
-        help=f"Write summary here (default: {DEFAULT_SETTINGS.summary_file})",
+        help=(
+            "Write summary to this file instead of stdout "
+            "(use - for stdout explicitly)."
+        ),
     )
     parser.add_argument(
         "--transcription-backend",
@@ -41,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help=(
             "Whisper weights: Hugging Face repo or local path "
-            f"(default: {DEFAULT_SETTINGS.whisper_model})"
+            f"(default: {Settings().whisper_model})"
         ),
     )
     parser.add_argument(
@@ -75,7 +78,6 @@ def main(argv: list[str] | None = None) -> int:
         overrides["youtube_local_transcribe"] = True
     if overrides:
         settings = replace(settings, **overrides)
-    out_path = Path(args.output or settings.summary_file)
 
     try:
         kind = detect_source_kind(args.source)
@@ -105,28 +107,41 @@ def main(argv: list[str] | None = None) -> int:
     if kind is SourceKind.YOUTUBE and not settings.youtube_local_transcribe:
         vtt_candidates = sorted(Path(".").glob(settings.transcript_glob))
         if vtt_candidates:
-            print(f"Using subtitles: {vtt_candidates[0]}")
+            print(f"Using subtitles: {vtt_candidates[0]}", file=sys.stderr)
 
     chunks = smart_chunk(transcript, settings.chunk_chars)
-    print(f"Transcript length: {len(transcript):,} chars | chunks: {len(chunks)}")
+    print(
+        f"Transcript length: {len(transcript):,} chars | chunks: {len(chunks)}",
+        file=sys.stderr,
+    )
 
     part_summaries: list[str] = []
     for i, ch in enumerate(chunks, 1):
-        print(f"Summarizing chunk {i}/{len(chunks)} with {settings.chunk_model}...")
-        summary = summarize_chunk(ch, settings)
-        if not summary:
+        print(
+            f"Summarizing chunk {i}/{len(chunks)} with {settings.chunk_model}...",
+            file=sys.stderr,
+        )
+        chunk_summary = summarize_chunk(ch, settings)
+        if not chunk_summary:
             print(f"Failed to summarize chunk {i}.", file=sys.stderr)
             return 1
-        part_summaries.append(summary)
+        part_summaries.append(chunk_summary)
 
-    print(f"Creating final summary with {settings.final_model}...")
+    print(
+        f"Creating final summary with {settings.final_model}...",
+        file=sys.stderr,
+    )
     summary = finalize_summary(part_summaries, settings)
     if not summary:
         print("Final summary is empty.", file=sys.stderr)
         return 1
 
-    out_path.write_text(summary, encoding="utf-8")
-    print(f"Saved summary to: {out_path.resolve()}")
+    if args.output is None or args.output == "-":
+        print(summary)
+    else:
+        out_path = Path(args.output)
+        out_path.write_text(summary, encoding="utf-8")
+        print(f"Wrote summary to: {out_path.resolve()}", file=sys.stderr)
     return 0
 
 
