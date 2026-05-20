@@ -2,6 +2,7 @@ import re
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
@@ -21,19 +22,96 @@ _YT_JS_RUNTIMES = {"node": {}, "deno": {}}
 _YT_REMOTE_COMPONENTS = ["ejs:github"]
 
 
-def _subtitle_lang_candidates(lang: str) -> list[list[str]]:
-    raw = (lang or "").strip()
+def _base_ydl_opts() -> dict[str, Any]:
+    return {
+        "noplaylist": True,
+        "http_headers": _YT_HTTP_HEADERS,
+        "js_runtimes": _YT_JS_RUNTIMES,
+        "remote_components": _YT_REMOTE_COMPONENTS,
+    }
+
+
+def _extract_video_info(url: str) -> dict[str, Any]:
+    opts = {
+        **_base_ydl_opts(),
+        "skip_download": True,
+        "quiet": True,
+        "no_warnings": True,
+    }
+    with YoutubeDL(opts) as ydl:
+        return ydl.extract_info(url, download=False)
+
+
+def _collect_subtitle_lang_keys(info: dict[str, Any]) -> set[str]:
+    keys: set[str] = set()
+    for field in ("subtitles", "automatic_captions"):
+        keys.update((info.get(field) or {}).keys())
+    return keys
+
+
+def _pick_original_subtitle_langs(info: dict[str, Any]) -> list[str]:
+    """Prefer YouTube *-orig tracks (e.g. en-orig, ru-orig)."""
+    keys = _collect_subtitle_lang_keys(info)
+    orig = sorted(k for k in keys if k.endswith("-orig"))
+    if orig:
+        return orig
+
+    manual = sorted((info.get("subtitles") or {}).keys())
+    if manual:
+        return manual
+
+    audio_lang = (info.get("language") or "").strip()
+    if audio_lang:
+        return [audio_lang]
+
+    return []
+
+
+def _subtitle_lang_candidates_explicit(lang: str) -> list[list[str]]:
+    raw = lang.strip()
     base = raw.split("-")[0] if raw else ""
     candidates: list[list[str]] = []
 
     for langs in (
         [raw] if raw else [],
         [f"{base}.*"] if base else [],
-        ["en", "en.*"] if base != "en" else [],
         ["all", "-live_chat"],
     ):
         if langs and langs not in candidates:
             candidates.append(langs)
+    return candidates
+
+
+def _subtitle_lang_candidates(
+    info: dict[str, Any] | None, lang: str | None
+) -> list[list[str]]:
+    if lang:
+        return _subtitle_lang_candidates_explicit(lang)
+
+    if info is None:
+        return [["all", "-live_chat"]]
+
+    candidates: list[list[str]] = []
+    keys = _collect_subtitle_lang_keys(info)
+    orig = sorted(k for k in keys if k.endswith("-orig"))
+    if orig:
+        candidates.append(orig)
+        base_langs: list[str] = []
+        for code in orig:
+            base = code[: -len("-orig")]
+            if base and base in keys and base not in base_langs:
+                base_langs.append(base)
+        if base_langs:
+            candidates.append(base_langs)
+
+    if not candidates:
+        picked = _pick_original_subtitle_langs(info)
+        if picked:
+            candidates.append(picked)
+
+    fallback = ["all", "-live_chat"]
+    if fallback not in candidates:
+        candidates.append(fallback)
     return candidates
 
 
@@ -66,22 +144,45 @@ def _find_vtt_file(glob_pattern: str) -> Path | None:
     return candidates[0] if candidates else None
 
 
-def download_subtitles(url: str, lang: str, transcript_glob: str) -> Path | None:
+def download_subtitles(
+    url: str, lang: str | None, transcript_glob: str
+) -> Path | None:
     _cleanup_transcripts(transcript_glob)
 
-    for langs in _subtitle_lang_candidates(lang):
+    info: dict[str, Any] | None = None
+    if not lang:
+        try:
+            info = _extract_video_info(url)
+        except Exception as e:
+            print(f"Could not inspect subtitle languages: {e}", file=sys.stderr)
+
+    lang_attempts = _subtitle_lang_candidates(info, lang)
+    if info and not lang:
+        orig = [k for k in _collect_subtitle_lang_keys(info) if k.endswith("-orig")]
+        if orig:
+            print(
+                f"Using original caption track(s): {', '.join(orig)}",
+                file=sys.stderr,
+            )
+        elif (info.get("subtitles") or {}):
+            manual = ", ".join(sorted((info.get("subtitles") or {}).keys()))
+            print(f"Using manual caption track(s): {manual}", file=sys.stderr)
+        elif info.get("language"):
+            print(
+                f"No *-orig captions; using audio language: {info['language']}",
+                file=sys.stderr,
+            )
+
+    for langs in lang_attempts:
         ydl_opts = {
+            **_base_ydl_opts(),
             "skip_download": True,
             "writesubtitles": True,
             "writeautomaticsub": True,
             "subtitleslangs": langs,
             "subtitlesformat": "vtt",
             "outtmpl": "transcript.%(ext)s",
-            "noplaylist": True,
             "quiet": False,
-            "http_headers": _YT_HTTP_HEADERS,
-            "js_runtimes": _YT_JS_RUNTIMES,
-            "remote_components": _YT_REMOTE_COMPONENTS,
         }
         try:
             with YoutubeDL(ydl_opts) as ydl:
@@ -90,7 +191,10 @@ def download_subtitles(url: str, lang: str, transcript_glob: str) -> Path | None
             print(f"Subtitle download failed for {langs}: {e}", file=sys.stderr)
             continue
         except Exception as e:
-            print(f"Unexpected subtitle download error for {langs}: {e}", file=sys.stderr)
+            print(
+                f"Unexpected subtitle download error for {langs}: {e}",
+                file=sys.stderr,
+            )
             continue
 
         vtt = _find_vtt_file(transcript_glob)
@@ -100,19 +204,25 @@ def download_subtitles(url: str, lang: str, transcript_glob: str) -> Path | None
     return None
 
 
-def download_youtube_audio(url: str, dest_dir: Path) -> Path:
+def download_youtube_audio(url: str, dest_dir: Path, *, quiet: bool = False) -> Path:
     """Download best-effort audio into dest_dir; return path to the media file."""
     stem = dest_dir / "audio"
     ydl_opts = {
-        "format": "bestaudio[ext=m4a]/bestaudio/best",
+        **_base_ydl_opts(),
+        "format": "bestaudio/best",
         "outtmpl": str(stem) + ".%(ext)s",
-        "quiet": True,
-        "no_warnings": True,
-        "noplaylist": True,
-        "http_headers": _YT_HTTP_HEADERS,
-        "js_runtimes": _YT_JS_RUNTIMES,
-        "remote_components": _YT_REMOTE_COMPONENTS,
+        "postprocessors": [
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "m4a",
+                "preferredquality": "192",
+            }
+        ],
+        "quiet": quiet,
+        "no_warnings": quiet,
     }
+    if not quiet:
+        print("Downloading audio from YouTube…", file=sys.stderr)
     try:
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
@@ -121,18 +231,31 @@ def download_youtube_audio(url: str, dest_dir: Path) -> Path:
     candidates = sorted(dest_dir.glob("audio.*"))
     if not candidates:
         raise RuntimeError("yt-dlp did not produce an audio file.")
-    return candidates[0]
+    audio = candidates[0]
+    if not quiet:
+        size_mb = audio.stat().st_size / (1024 * 1024)
+        print(f"Downloaded audio: {audio.name} ({size_mb:.1f} MB)", file=sys.stderr)
+    return audio
 
 
 class YouTubeExtractor:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
-    def extract(self, url: str) -> str:
-        if self._settings.youtube_local_transcribe:
+    def extract(self, url: str, *, quiet: bool = False) -> str:
+        if self._settings.use_transcribe:
+            if not quiet:
+                print("Transcribing audio on-device (--transcribe)…", file=sys.stderr)
+                print(
+                    f"Backend: {self._settings.transcription_backend} "
+                    f"({self._settings.whisper_model})",
+                    file=sys.stderr,
+                )
             with tempfile.TemporaryDirectory() as tmp:
-                audio_path = download_youtube_audio(url, Path(tmp))
-                return transcribe_local_media(audio_path.resolve(), self._settings)
+                audio_path = download_youtube_audio(url, Path(tmp), quiet=quiet)
+                return transcribe_local_media(
+                    audio_path.resolve(), self._settings, quiet=quiet
+                )
 
         vtt_path = download_subtitles(
             url,
@@ -141,10 +264,12 @@ class YouTubeExtractor:
         )
         if not vtt_path:
             raise RuntimeError(
-                "Could not fetch subtitles. The video may have no subtitles, "
-                "or YouTube may be rate-limiting the request."
+                "Could not fetch subtitles. Try again with --transcribe to use "
+                "on-device speech-to-text, or check that the video has captions."
             )
         transcript = vtt_to_text(str(vtt_path))
         if not transcript:
             raise RuntimeError("Transcript text is empty after cleaning.")
+        if not quiet:
+            print(f"Using subtitles: {vtt_path}", file=sys.stderr)
         return transcript

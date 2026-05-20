@@ -16,13 +16,20 @@ Install the package (optional; adds the `summarize` command):
 pip install -e .
 ```
 
-**Local audio/video (Whisper on Apple Silicon):** MLX Whisper is optional so the base install stays portable.
+**On-device transcription** (`--transcribe`) uses **faster-whisper** by default when installed:
+
+```bash
+pip install -e ".[faster-transcribe]"
+```
+
+Optional Apple Silicon backend:
 
 ```bash
 pip install -e ".[local-transcribe]"
+# then set SUMMARIZER_TRANSCRIPTION_BACKEND=mlx_whisper in .env
 ```
 
-You need `**ffmpeg**` on your `PATH` (used to decode media). The first run may download model weights from Hugging Face.
+The first `--transcribe` run downloads Whisper weights (e.g. `base`). PyAV bundles FFmpeg; no system `ffmpeg` required for faster-whisper.
 
 Run (from the repo root, after `pip install -r requirements.txt`):
 
@@ -36,18 +43,34 @@ Or, if you ran `pip install -e .`:
 summarize "YouTube URL or path/to/file.txt"
 ```
 
-The final summary goes to **stdout** (progress logs go to stderr). Use `-o out.txt` to write to a file instead (`-o -` is stdout explicitly).
+The final summary goes to **stdout** (progress logs go to stderr).
 
-**Local transcription flags** (audio/video inputs only):
+```bash
+summarize SOURCE [-o FILE] [--transcribe] [-q]
+```
 
-- `--whisper-model` — e.g. `mlx-community/whisper-small` (default is `whisper-tiny` for speed)
-- `--speech-language` — force a language code (e.g. `en`); omit for auto-detect
-- `--transcription-backend` — currently `mlx_whisper` (plug-in point for more backends later)
+| Flag | Purpose |
+|------|---------|
+| `SOURCE` | YouTube URL or path to a text / audio / video file |
+| `-o FILE` | Write summary to a file instead of stdout |
+| `--transcribe` | Use on-device STT (YouTube: skip captions; media: always) |
+| `-q` | Quiet: print only the summary |
+
+Examples:
+
+```bash
+summarize 'https://www.youtube.com/watch?v=...'
+summarize 'https://www.youtube.com/watch?v=...' --transcribe
+summarize podcast.mp3 -o notes.txt
+summarize lecture.txt -q
+```
+
+Advanced transcription/model settings live in `.env` (see `.env.example`), not on the CLI.
 
 ## What it does
 
-- **YouTube:** downloads subtitles with `yt-dlp`, cleans `.vtt` to plain text
-- **Audio/video file:** transcribes locally via **MLX Whisper** (see optional extra above), then summarizes
+- **YouTube:** downloads **original** captions (`*-orig`) by default; `--transcribe` skips captions and uses on-device STT instead
+- **Audio/video file:** transcribes locally via **MLX Whisper** or **faster-whisper**, then summarizes
 - **Text file:** reads a local UTF-8 file (e.g. `.txt`, `.md`; any extension that is not treated as media)
 - splits long text into chunks, summarizes each chunk, then merges into one structured summary
 
@@ -56,7 +79,7 @@ The final summary goes to **stdout** (progress logs go to stderr). Use `-o out.t
 - Python 3.10+
 - `yt-dlp`
 - an OpenAI API key in a `.env` file
-- For local media: **Apple Silicon**, `ffmpeg`, and `pip install -e ".[local-transcribe]"` (or `mlx-whisper` alone)
+- For `--transcribe`: `pip install -e ".[faster-transcribe]"` (CPU; CUDA if configured in `.env`)
 
 Example `.env`:
 

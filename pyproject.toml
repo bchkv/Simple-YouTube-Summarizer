@@ -18,6 +18,9 @@ dependencies = [
 local-transcribe = [
     "mlx-whisper>=0.4",
 ]
+faster-transcribe = [
+    "faster-whisper>=1.1",
+]
 
 [project.scripts]
 summarize = "summarizer.cli:main"

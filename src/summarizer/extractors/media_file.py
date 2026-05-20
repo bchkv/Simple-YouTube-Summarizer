@@ -8,8 +8,8 @@ class MediaFileExtractor:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
-    def extract(self, source: str) -> str:
+    def extract(self, source: str, *, quiet: bool = False) -> str:
         path = Path(source).expanduser().resolve()
         if not path.is_file():
             raise FileNotFoundError(f"Not a file: {path}")
-        return transcribe_local_media(path, self._settings)
+        return transcribe_local_media(path, self._settings, quiet=quiet)

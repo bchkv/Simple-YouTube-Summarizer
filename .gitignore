@@ -1,12 +1,43 @@
-*.vtt
-*.txt
-*.wav
-
-!requirements.txt
-
-.idea/
+# Environment and secrets
 .env
+.env.*
+!.env.example
+
+# Virtual environments
+venv/
 .venv/
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE / OS
+.idea/
+.vscode/
 .DS_Store
 **/.DS_Store
+
+# Project artifacts
+*.vtt
+summary.txt
+
+# Local media (keep test fixtures out of git by default)
+*.wav
+*.mp3
+*.m4a
+*.mp4
+*.mkv
+*.webm
+
+# Allow dependency lock files / requirements
+!requirements.txt

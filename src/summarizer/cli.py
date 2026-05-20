@@ -1,19 +1,45 @@
 import argparse
 import sys
-from dataclasses import replace
 from pathlib import Path
 
-from summarizer.config import Settings
-from summarizer.pipeline import finalize_summary, smart_chunk, summarize_chunk
+from summarizer.config import load_settings
+from summarizer.pipeline import summarize_transcript, smart_chunk
 from summarizer.routing import SourceKind, detect_source_kind, extractor_for
+
+
+def _log(message: str, *, quiet: bool) -> None:
+    if not quiet:
+        print(message, file=sys.stderr)
+
+
+def _extract_transcript(
+    source: str,
+    kind: SourceKind,
+    settings,
+    *,
+    quiet: bool,
+) -> str:
+    if kind is SourceKind.MEDIA_FILE:
+        from summarizer.extractors.media_file import MediaFileExtractor
+
+        _log(
+            f"Transcribing with {settings.transcription_backend} "
+            f"({settings.whisper_model})…",
+            quiet=quiet,
+        )
+        return MediaFileExtractor(settings).extract(source, quiet=quiet)
+
+    if kind is SourceKind.YOUTUBE:
+        from summarizer.extractors.youtube import YouTubeExtractor
+
+        return YouTubeExtractor(settings).extract(source, quiet=quiet)
+
+    return extractor_for(kind, settings).extract(source)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description=(
-            "Summarize YouTube (captions by default; optional on-device STT), "
-            "local audio/video (Whisper), or plain text files."
-        ),
+        description="Summarize YouTube videos, local media, or text files.",
     )
     parser.add_argument(
         "source",
@@ -24,60 +50,26 @@ def main(argv: list[str] | None = None) -> int:
         "--output",
         metavar="FILE",
         default=None,
-        help=(
-            "Write summary to this file instead of stdout "
-            "(use - for stdout explicitly)."
-        ),
+        help="Write summary to this file instead of stdout",
     )
     parser.add_argument(
-        "--transcription-backend",
-        metavar="NAME",
-        default=None,
-        help=(
-            "Local STT backend (default: mlx_whisper). "
-            "Use mlx_whisper for Apple Silicon / MLX."
-        ),
-    )
-    parser.add_argument(
-        "--whisper-model",
-        metavar="ID",
-        default=None,
-        help=(
-            "Whisper weights: Hugging Face repo or local path "
-            f"(default: {Settings().whisper_model})"
-        ),
-    )
-    parser.add_argument(
-        "--speech-language",
-        metavar="CODE",
-        default=None,
-        help=(
-            "Language code for local transcription (e.g. en). "
-            "Omitted = auto-detect on multilingual models."
-        ),
-    )
-    parser.add_argument(
-        "--youtube-local-transcribe",
+        "--transcribe",
         action="store_true",
         help=(
-            "For YouTube URLs: download audio and transcribe on-device "
-            "(default: use YouTube captions / auto-generated subs)."
+            "Use on-device speech-to-text "
+            "(YouTube: skip captions; media: always transcribe)"
         ),
+    )
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Only print the summary (suppress progress logs)",
     )
     args = parser.parse_args(argv)
 
-    settings = Settings()
-    overrides: dict = {}
-    if args.transcription_backend is not None:
-        overrides["transcription_backend"] = args.transcription_backend
-    if args.whisper_model is not None:
-        overrides["whisper_model"] = args.whisper_model
-    if args.speech_language is not None:
-        overrides["transcribe_language"] = args.speech_language
-    if args.youtube_local_transcribe:
-        overrides["youtube_local_transcribe"] = True
-    if overrides:
-        settings = replace(settings, **overrides)
+    settings = load_settings(transcribe=args.transcribe)
+    quiet = args.quiet
 
     try:
         kind = detect_source_kind(args.source)
@@ -85,18 +77,10 @@ def main(argv: list[str] | None = None) -> int:
         print(str(e), file=sys.stderr)
         return 2
 
-    if kind is SourceKind.MEDIA_FILE or (
-        kind is SourceKind.YOUTUBE and settings.youtube_local_transcribe
-    ):
-        print(
-            f"Transcribing with {settings.transcription_backend} "
-            f"({settings.whisper_model})…",
-            file=sys.stderr,
-        )
-
-    extractor = extractor_for(kind, settings)
     try:
-        transcript = extractor.extract(args.source)
+        transcript = _extract_transcript(
+            args.source, kind, settings, quiet=quiet
+        )
     except (FileNotFoundError, RuntimeError, ValueError) as e:
         print(str(e), file=sys.stderr)
         return 1
@@ -104,36 +88,27 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Failed to extract text: {e}", file=sys.stderr)
         return 1
 
-    if kind is SourceKind.YOUTUBE and not settings.youtube_local_transcribe:
-        vtt_candidates = sorted(Path(".").glob(settings.transcript_glob))
-        if vtt_candidates:
-            print(f"Using subtitles: {vtt_candidates[0]}", file=sys.stderr)
-
-    chunks = smart_chunk(transcript, settings.chunk_chars)
-    print(
-        f"Transcript length: {len(transcript):,} chars | chunks: {len(chunks)}",
-        file=sys.stderr,
-    )
-
-    part_summaries: list[str] = []
-    for i, ch in enumerate(chunks, 1):
+    if (
+        not quiet
+        and settings.use_transcribe
+        and len(transcript) < 500
+    ):
         print(
-            f"Summarizing chunk {i}/{len(chunks)} with {settings.chunk_model}...",
+            "Warning: transcript looks very short; audio may be incomplete. "
+            "Ensure ffmpeg is installed for YouTube audio extraction.",
             file=sys.stderr,
         )
-        chunk_summary = summarize_chunk(ch, settings)
-        if not chunk_summary:
-            print(f"Failed to summarize chunk {i}.", file=sys.stderr)
-            return 1
-        part_summaries.append(chunk_summary)
 
-    print(
-        f"Creating final summary with {settings.final_model}...",
-        file=sys.stderr,
+    chunks = smart_chunk(transcript, settings.chunk_chars)
+    _log(
+        f"Transcript length: {len(transcript):,} chars | chunks: {len(chunks)}",
+        quiet=quiet,
     )
-    summary = finalize_summary(part_summaries, settings)
+
+    _log(f"Summarizing with {settings.final_model}…", quiet=quiet)
+    summary = summarize_transcript(transcript, settings)
     if not summary:
-        print("Final summary is empty.", file=sys.stderr)
+        print("Summary is empty.", file=sys.stderr)
         return 1
 
     if args.output is None or args.output == "-":
@@ -141,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         out_path = Path(args.output)
         out_path.write_text(summary, encoding="utf-8")
-        print(f"Wrote summary to: {out_path.resolve()}", file=sys.stderr)
+        _log(f"Wrote summary to: {out_path.resolve()}", quiet=quiet)
     return 0
 
 
