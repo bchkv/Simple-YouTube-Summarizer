@@ -3,6 +3,8 @@
 Summarize **YouTube videos**, **PDFs**, **audio/video**, or **text files** using OpenAI.  
 Extract text (captions, OCR, or local Whisper), then produce a short plain-language summary on stdout.
 
+Local transcription using Whisper is supported.
+
 ## Quick start
 
 ```bash
