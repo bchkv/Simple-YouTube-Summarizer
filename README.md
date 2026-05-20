@@ -1,107 +1,229 @@
-## Purpose
+# Summarizer
 
-Get YouTube video summaries for **under a cent per video.**
+Summarize **YouTube videos**, **PDFs**, **audio/video**, or **text files** using OpenAI.  
+Extract text (captions, OCR, or local Whisper), then produce a short plain-language summary on stdout.
 
-## Usage
+## Quick start
 
-Install dependencies:
+```bash
+git clone https://github.com/bchkv/Simple-YouTube-Summarizer.git
+cd Simple-YouTube-Summarizer
 
-`pip install -r requirements.txt`
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
 
-Edit `.env` adding your OpenAI's API key
+pip install -e .
+pip install -e ".[faster-transcribe]"   # for --transcribe
+pip install -e ".[pdf]"                  # for .pdf files
 
-Install the package (optional; adds the `summarize` command):
+cp .env.example .env
+# set OPENAI_API_KEY in .env
+
+summarize 'https://www.youtube.com/watch?v=VIDEO_ID'
+```
+
+Progress logs go to **stderr**; the summary is printed on **stdout**.
+
+## Install
+
+### 1. Base CLI
+
+From the repo root, with a virtualenv active:
 
 ```bash
 pip install -e .
 ```
 
-**On-device transcription** (`--transcribe`) uses **faster-whisper** by default when installed:
+This installs core dependencies (`openai`, `python-dotenv`, `yt-dlp`) and registers the **`summarize`** command.
+
+Verify:
 
 ```bash
-pip install -e ".[faster-transcribe]"
+which summarize
+summarize --help
 ```
 
-Optional Apple Silicon backend:
+You can run `summarize` from any directory while `.venv` is activated.
+
+**Without** editable install, use:
 
 ```bash
-pip install -e ".[local-transcribe]"
-# then set SUMMARIZER_TRANSCRIPTION_BACKEND=mlx_whisper in .env
+python main.py SOURCE
 ```
 
-The first `--transcribe` run downloads Whisper weights (e.g. `base`). PyAV bundles FFmpeg; no system `ffmpeg` required for faster-whisper.
+### 2. Optional extras
 
-Run (from the repo root, after `pip install -r requirements.txt`):
+| Extra | Command | Used for |
+|-------|---------|----------|
+| Speech-to-text | `pip install -e ".[faster-transcribe]"` | `--transcribe` (default backend on CPU) |
+| Apple Silicon STT | `pip install -e ".[local-transcribe]"` | `--transcribe` with `SUMMARIZER_TRANSCRIPTION_BACKEND=mlx_whisper` |
+| PDF | `pip install -e ".[pdf]"` | `.pdf` input |
+
+**System tools:**
+
+| Tool | When |
+|------|------|
+| [Node.js](https://nodejs.org/) | Recommended for reliable YouTube extraction (`yt-dlp`) |
+| [ffmpeg](https://ffmpeg.org/) | YouTube audio download with `--transcribe` |
+| [Tesseract](https://github.com/tesseract-ocr/tesseract) + [Poppler](https://poppler.freedesktop.org/) | PDF OCR (scanned pages) |
+
+macOS example:
 
 ```bash
-python main.py "YouTube URL or path/to/file.txt"
+brew install node ffmpeg tesseract poppler
 ```
 
-Or, if you ran `pip install -e .`:
+### 3. API key
 
 ```bash
-summarize "YouTube URL or path/to/file.txt"
+cp .env.example .env
 ```
 
-The final summary goes to **stdout** (progress logs go to stderr).
+Set `OPENAI_API_KEY` in `.env`. The app loads this file from the repo root (and overrides any stale shell export).
+
+## Usage
 
 ```bash
-summarize SOURCE [-o FILE] [--transcribe] [-q]
+summarize SOURCE [-o FILE] [--transcribe] [-m SIZE] [-q]
 ```
 
-| Flag | Purpose |
-|------|---------|
-| `SOURCE` | YouTube URL or path to a text / audio / video file |
+| Flag | Description |
+|------|-------------|
+| `SOURCE` | YouTube URL, or path to `.pdf`, `.txt`, `.md`, audio, or video |
 | `-o FILE` | Write summary to a file instead of stdout |
-| `--transcribe` | Use on-device STT (YouTube: skip captions; media: always) |
+| `--transcribe` | On-device speech-to-text (see below) |
+| `-m`, `--whisper-model` | Whisper size when transcribing (`tiny`, `base`, `small`, `medium`, `large-v3`, `turbo`; aliases `large`, `big`) |
 | `-q` | Quiet: print only the summary |
 
-Examples:
+### Examples
 
 ```bash
+# YouTube — original captions (e.g. en-orig, ru-orig)
 summarize 'https://www.youtube.com/watch?v=...'
-summarize 'https://www.youtube.com/watch?v=...' --transcribe
-summarize podcast.mp3 -o notes.txt
-summarize lecture.txt -q
+
+# YouTube — skip captions; download audio and transcribe locally
+summarize 'https://www.youtube.com/watch?v=...' --transcribe -m small
+
+# Local media — always transcribed, then summarized
+summarize podcast.mp3 --transcribe
+
+# PDF — embedded text, or OCR if the scan has little text
+summarize paper.pdf -o summary.txt
+
+# Plain text
+summarize notes.md -q
 ```
 
-Advanced transcription/model settings live in `.env` (see `.env.example`), not on the CLI.
+## Input types
 
-## What it does
+### YouTube (default)
 
-- **YouTube:** downloads **original** captions (`*-orig`) by default; `--transcribe` skips captions and uses on-device STT instead
-- **Audio/video file:** transcribes locally via **MLX Whisper** or **faster-whisper**, then summarizes
-- **Text file:** reads a local UTF-8 file (e.g. `.txt`, `.md`; any extension that is not treated as media)
-- splits long text into chunks, summarizes each chunk, then merges into one structured summary
+- Fetches **original** caption tracks (`*-orig`, e.g. `ru-orig`, `en-orig`) via `yt-dlp`.
+- Falls back through other subtitle languages if needed.
+- No API cost for extraction; OpenAI is used only for summarization.
+
+### YouTube / media with `--transcribe`
+
+- **YouTube:** ignores captions, downloads audio, runs **faster-whisper** (or MLX if configured).
+- **Audio/video files** (`.mp3`, `.wav`, `.mp4`, `.mkv`, …): always transcribed locally, then summarized.
+- Transcription progress (per segment or per PDF page) is shown on stderr unless `-q` is set.
+- First run downloads Whisper weights (default model: `base`).
+
+### PDF (`.pdf`)
+
+Requires `pip install -e ".[pdf]"` and system **tesseract** + **poppler**.
+
+1. Tries **embedded text** (fast, for digital PDFs).
+2. If there is too little text per page, runs **OCR** (Tesseract) page by page.
+
+Force OCR for every page: `SUMMARIZER_PDF_FORCE_OCR=1` in `.env`.
+
+### Text files
+
+Reads UTF-8 text (e.g. `.txt`, `.md`).
+
+## Summarization
+
+Long transcripts are split into chunks, each summarized, then combined with a single **“Summarize:”** prompt.  
+Output is plain prose (no fixed report sections).
+
+Models (override in `.env`):
+
+- Chunk pass: `SUMMARIZER_CHUNK_MODEL` (default `gpt-4o-mini`)
+- Final pass: `SUMMARIZER_FINAL_MODEL` (default `gpt-5-mini`)
+
+## Configuration (`.env`)
+
+See `.env.example`. Common variables:
+
+```env
+OPENAI_API_KEY=sk-...
+
+# On-device transcription (--transcribe)
+SUMMARIZER_TRANSCRIPTION_BACKEND=faster_whisper
+SUMMARIZER_WHISPER_MODEL=base
+SUMMARIZER_WHISPER_DEVICE=cpu
+SUMMARIZER_WHISPER_COMPUTE_TYPE=int8
+
+# PDF OCR
+# SUMMARIZER_PDF_OCR_DPI=200
+# SUMMARIZER_PDF_OCR_LANGUAGE=rus
+# SUMMARIZER_PDF_FORCE_OCR=0
+```
+
+**Whisper backend:** `faster_whisper` (default when installed) or `mlx_whisper` on Apple Silicon.  
+**GPU:** set `SUMMARIZER_WHISPER_DEVICE=cuda` and `SUMMARIZER_WHISPER_COMPUTE_TYPE=float16` (requires CUDA + cuDNN for faster-whisper).
 
 ## Requirements
 
-- Python 3.10+
-- `yt-dlp`
-- an OpenAI API key in a `.env` file
-- For `--transcribe`: `pip install -e ".[faster-transcribe]"` (CPU; CUDA if configured in `.env`)
+- Python **3.10+**
+- OpenAI API key
+- **Base:** `pip install -e .`
+- **`--transcribe`:** `pip install -e ".[faster-transcribe]"` (or `[local-transcribe]` on MLX)
+- **PDF:** `pip install -e ".[pdf]"` plus tesseract and poppler
 
-Example `.env`:
+## Troubleshooting
 
-```env
-OPENAI_API_KEY=your_api_key_here
-```
+### `ModuleNotFoundError` after `source .venv/bin/activate`
 
-## Troubleshooting: wrong Python environment
-
-If you see `ModuleNotFoundError` for packages from `requirements.txt` (for example `openai` or `dotenv`) even after activating `venv`, your shell may be using `pyenv` shims instead of this repo's virtualenv.
-
-Recreate the venv and reinstall in this project:
+Your shell may still be using **pyenv shims** instead of the venv. Reinstall inside the project venv:
 
 ```bash
 deactivate 2>/dev/null || true
-rm -rf venv
-python3 -m venv venv
-source venv/bin/activate
+rm -rf .venv
+python3 -m venv .venv
+source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+pip install -e .
+pip install -e ".[faster-transcribe]"
+pip install -e ".[pdf]"    # if needed
+which summarize
 python -c "import sys; print(sys.executable)"
 ```
 
-The printed executable should be:
-`/Users/bochkovoy/Projects/Summarizer/venv/bin/python`
+`sys.executable` should be `.../Summarizer/.venv/bin/python`.
+
+Use `python -m pip install ...`, not bare `pip`, if installs land in the wrong environment.
+
+### YouTube subtitles fail
+
+- Install **Node.js** for `yt-dlp` challenge solving.
+- Try without `--transcribe` first (captions are cheaper and often better).
+- With `--transcribe`, ensure **ffmpeg** is installed.
+
+### Very short transcript with `--transcribe`
+
+- Check downloaded audio size in stderr logs.
+- Try a larger model: `-m small` or `-m medium`.
+- For YouTube, compare with caption mode (no `--transcribe`).
+
+### PDF OCR errors
+
+- Install **tesseract** and **poppler** (`brew install tesseract poppler` on macOS).
+- Install the Python extra: `pip install -e ".[pdf]"`.
+- For Russian scans: `SUMMARIZER_PDF_OCR_LANGUAGE=rus` in `.env`.
+
+### Wrong OpenAI API key
+
+Ensure `.env` in the repo root has the correct key. The app loads it with **override** so it wins over old `export OPENAI_API_KEY=...` in your shell.

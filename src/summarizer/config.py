@@ -77,10 +77,70 @@ def _default_whisper_compute_type(backend: str, device: str) -> str:
     return "int8"
 
 
+_WHISPER_ALIASES: dict[str, str] = {
+    "big": "large-v3",
+    "large": "large-v3",
+}
+
+_FASTER_WHISPER_SIZES = frozenset(
+    {
+        "tiny",
+        "base",
+        "small",
+        "medium",
+        "large-v1",
+        "large-v2",
+        "large-v3",
+        "large",
+        "distil-large-v3",
+        "turbo",
+    }
+)
+
+_MLX_WHISPER_MODELS: dict[str, str] = {
+    "tiny": "mlx-community/whisper-tiny",
+    "base": "mlx-community/whisper-small",
+    "small": "mlx-community/whisper-small",
+    "medium": "mlx-community/whisper-medium",
+    "large-v1": "mlx-community/whisper-large-v1",
+    "large-v2": "mlx-community/whisper-large-v2",
+    "large-v3": "mlx-community/whisper-large-v3",
+    "large": "mlx-community/whisper-large-v3",
+    "big": "mlx-community/whisper-large-v3",
+    "turbo": "mlx-community/whisper-large-v3-turbo",
+    "distil-large-v3": "mlx-community/whisper-large-v3",
+}
+
+
+def resolve_whisper_model(name: str | None, backend: str) -> str:
+    """Map CLI/env size aliases to backend-specific model ids."""
+    if not name:
+        return _default_whisper_model(backend)
+
+    raw = name.strip()
+    if "/" in raw:
+        return raw
+
+    key = _WHISPER_ALIASES.get(raw.lower(), raw.lower())
+    backend_key = backend.lower().replace("-", "_")
+
+    if backend_key in ("faster_whisper", "faster"):
+        if key in _FASTER_WHISPER_SIZES or key in _WHISPER_ALIASES:
+            return key
+        return raw
+
+    if backend_key in ("mlx_whisper", "mlx"):
+        if key in _MLX_WHISPER_MODELS:
+            return _MLX_WHISPER_MODELS[key]
+        return f"mlx-community/whisper-{key}"
+
+    return raw
+
+
 def _default_whisper_model(backend: str) -> str:
     explicit = _env("SUMMARIZER_WHISPER_MODEL")
     if explicit:
-        return explicit
+        return resolve_whisper_model(explicit, backend)
     key = backend.lower().replace("-", "_")
     if key in ("faster_whisper", "faster"):
         return "base"
@@ -102,11 +162,19 @@ class Settings:
     transcribe_language: str | None = None
     # CLI --transcribe: skip YouTube captions; use on-device STT instead
     use_transcribe: bool = False
+    pdf_ocr_dpi: int = 200
+    pdf_ocr_language: str | None = None
+    pdf_force_ocr: bool = False
 
 
-def load_settings(*, transcribe: bool = False) -> Settings:
+def load_settings(
+    *,
+    transcribe: bool = False,
+    whisper_model: str | None = None,
+) -> Settings:
     backend = _default_transcription_backend()
-    whisper_model = _default_whisper_model(backend)
+    chosen_model = whisper_model or _env("SUMMARIZER_WHISPER_MODEL")
+    resolved_model = resolve_whisper_model(chosen_model, backend)
     whisper_device = _default_whisper_device(backend)
     whisper_compute_type = _default_whisper_compute_type(backend, whisper_device)
     sub_lang = _env("SUMMARIZER_SUB_LANG")
@@ -124,11 +192,14 @@ def load_settings(*, transcribe: bool = False) -> Settings:
         chunk_chars=chunk_chars,
         transcript_glob=_env("SUMMARIZER_TRANSCRIPT_GLOB") or Settings.transcript_glob,
         transcription_backend=backend,
-        whisper_model=whisper_model,
+        whisper_model=resolved_model,
         whisper_device=whisper_device,
         whisper_compute_type=whisper_compute_type,
         transcribe_language=transcribe_language,
         use_transcribe=transcribe or bool(_env_bool("SUMMARIZER_USE_TRANSCRIBE")),
+        pdf_ocr_dpi=int(_env("SUMMARIZER_PDF_OCR_DPI") or "200"),
+        pdf_ocr_language=_env("SUMMARIZER_PDF_OCR_LANGUAGE"),
+        pdf_force_ocr=bool(_env_bool("SUMMARIZER_PDF_FORCE_OCR")),
     )
 
 

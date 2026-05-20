@@ -34,16 +34,21 @@ def _extract_transcript(
 
         return YouTubeExtractor(settings).extract(source, quiet=quiet)
 
+    if kind is SourceKind.PDF_FILE:
+        from summarizer.extractors.pdf_file import PdfFileExtractor
+
+        return PdfFileExtractor(settings).extract(source, quiet=quiet)
+
     return extractor_for(kind, settings).extract(source)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Summarize YouTube videos, local media, or text files.",
+        description="Summarize YouTube videos, PDFs, local media, or text files.",
     )
     parser.add_argument(
         "source",
-        help="YouTube URL or path to a text, audio, or video file",
+        help="YouTube URL or path to a PDF, text, audio, or video file",
     )
     parser.add_argument(
         "-o",
@@ -61,6 +66,17 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "-m",
+        "--whisper-model",
+        metavar="SIZE",
+        default=None,
+        help=(
+            "Whisper model for --transcribe: tiny, base, small, medium, "
+            "large-v3, turbo, distil-large-v3 (aliases: large, big). "
+            "Or a full model id / Hugging Face repo."
+        ),
+    )
+    parser.add_argument(
         "-q",
         "--quiet",
         action="store_true",
@@ -68,7 +84,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    settings = load_settings(transcribe=args.transcribe)
+    settings = load_settings(
+        transcribe=args.transcribe,
+        whisper_model=args.whisper_model,
+    )
     quiet = args.quiet
 
     try:

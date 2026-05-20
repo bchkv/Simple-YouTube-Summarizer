@@ -5,6 +5,7 @@ from pathlib import Path
 from summarizer.config import Settings
 from summarizer.extractors.base import TextExtractor
 from summarizer.extractors.media_file import MediaFileExtractor
+from summarizer.extractors.pdf_file import PdfFileExtractor
 from summarizer.extractors.text_file import TextFileExtractor
 from summarizer.extractors.youtube import YouTubeExtractor
 
@@ -12,6 +13,7 @@ from summarizer.extractors.youtube import YouTubeExtractor
 class SourceKind(Enum):
     YOUTUBE = "youtube"
     MEDIA_FILE = "media_file"
+    PDF_FILE = "pdf_file"
     TEXT_FILE = "text_file"
 
 
@@ -70,9 +72,11 @@ def detect_source_kind(source: str) -> SourceKind:
     if path.is_file():
         if _is_media_path(path):
             return SourceKind.MEDIA_FILE
+        if path.suffix.lower() == ".pdf":
+            return SourceKind.PDF_FILE
         return SourceKind.TEXT_FILE
     raise ValueError(
-        "Expected a YouTube URL or a path to a text file or audio/video file."
+        "Expected a YouTube URL or a path to a PDF, text, or audio/video file."
     )
 
 
@@ -81,6 +85,8 @@ def extractor_for(kind: SourceKind, settings: Settings) -> TextExtractor:
         return YouTubeExtractor(settings)
     if kind is SourceKind.MEDIA_FILE:
         return MediaFileExtractor(settings)
+    if kind is SourceKind.PDF_FILE:
+        return PdfFileExtractor(settings)
     if kind is SourceKind.TEXT_FILE:
         return TextFileExtractor()
     raise ValueError(f"Unsupported source kind: {kind!r}")

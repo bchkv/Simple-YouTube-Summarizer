@@ -21,6 +21,12 @@ local-transcribe = [
 faster-transcribe = [
     "faster-whisper>=1.1",
 ]
+pdf = [
+    "pymupdf>=1.24",
+    "pdf2image>=1.17",
+    "pytesseract>=0.3",
+    "Pillow>=10.0",
+]
 
 [project.scripts]
 summarize = "summarizer.cli:main"
