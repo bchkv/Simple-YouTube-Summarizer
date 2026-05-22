@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "summarizer"
 version = "0.1.0"
-description = "Summarize YouTube videos, local media, or text via OpenAI"
+description = "Universal CLI Summarizer — summarize YouTube, PDFs, media, and text via OpenAI"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

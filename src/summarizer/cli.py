@@ -2,9 +2,10 @@ import argparse
 import sys
 from pathlib import Path
 
-from summarizer.config import load_settings
+from summarizer.config import load_environment, load_settings
 from summarizer.pipeline import summarize_transcript, smart_chunk
 from summarizer.routing import SourceKind, detect_source_kind, extractor_for
+from summarizer.user_config import api_key_is_set, config_main, missing_api_key_message
 
 
 def _log(message: str, *, quiet: bool) -> None:
@@ -42,7 +43,7 @@ def _extract_transcript(
     return extractor_for(kind, settings).extract(source)
 
 
-def main(argv: list[str] | None = None) -> int:
+def _summarize_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description="Summarize YouTube videos, PDFs, local media, or text files.",
     )
@@ -83,6 +84,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Only print the summary (suppress progress logs)",
     )
     args = parser.parse_args(argv)
+
+    load_environment()
+    if not api_key_is_set():
+        print(missing_api_key_message(), file=sys.stderr)
+        return 2
 
     settings = load_settings(
         transcribe=args.transcribe,
@@ -125,7 +131,11 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     _log(f"Summarizing with {settings.final_model}…", quiet=quiet)
-    summary = summarize_transcript(transcript, settings)
+    try:
+        summary = summarize_transcript(transcript, settings)
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
+        return 1
     if not summary:
         print("Summary is empty.", file=sys.stderr)
         return 1
@@ -137,6 +147,14 @@ def main(argv: list[str] | None = None) -> int:
         out_path.write_text(summary, encoding="utf-8")
         _log(f"Wrote summary to: {out_path.resolve()}", quiet=quiet)
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "config":
+        load_environment()
+        return config_main(argv[1:])
+    return _summarize_main(argv)
 
 
 if __name__ == "__main__":

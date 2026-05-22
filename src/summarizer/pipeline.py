@@ -1,6 +1,7 @@
-from openai import OpenAI
+from openai import APIConnectionError, APIStatusError, AuthenticationError, OpenAI
 
 from summarizer.config import Settings, DEFAULT_SETTINGS
+from summarizer.user_config import missing_api_key_message
 
 _client: OpenAI | None = None
 
@@ -8,7 +9,12 @@ _client: OpenAI | None = None
 def _get_client() -> OpenAI:
     global _client
     if _client is None:
-        _client = OpenAI()
+        import os
+
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key or not api_key.strip():
+            raise RuntimeError(missing_api_key_message())
+        _client = OpenAI(api_key=api_key)
     return _client
 
 
@@ -19,7 +25,28 @@ def _chat_create(client: OpenAI, model: str, messages: list[dict], temperature: 
     }
     if not model.startswith("gpt-5"):
         kwargs["temperature"] = temperature
-    return client.chat.completions.create(**kwargs)
+    try:
+        return client.chat.completions.create(**kwargs)
+    except AuthenticationError as e:
+        raise RuntimeError(
+            "OpenAI authentication failed.\n"
+            "Set a valid API key with:\n"
+            "  summarize config set-key\n"
+            "Or export it manually:\n"
+            '  export OPENAI_API_KEY="sk-..."'
+        ) from e
+    except APIStatusError as e:
+        if e.status_code == 401:
+            raise RuntimeError(
+                "OpenAI authentication failed.\n"
+                "Set a valid API key with:\n"
+                "  summarize config set-key\n"
+                "Or export it manually:\n"
+                '  export OPENAI_API_KEY="sk-..."'
+            ) from e
+        raise
+    except APIConnectionError:
+        raise
 
 
 def smart_chunk(text: str, limit: int) -> list[str]:

@@ -11,7 +11,22 @@ except ImportError:
         return False
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-load_dotenv(dotenv_path=_REPO_ROOT / ".env", override=True)
+_PROJECT_ENV = _REPO_ROOT / ".env"
+
+_ENV_LOADED = False
+
+
+def load_environment() -> None:
+    """Load API key and settings from user config, then project .env."""
+    global _ENV_LOADED
+    if _ENV_LOADED:
+        return
+
+    from summarizer.user_config import CONFIG_FILE
+
+    load_dotenv(dotenv_path=CONFIG_FILE, override=False)
+    load_dotenv(dotenv_path=_PROJECT_ENV, override=True)
+    _ENV_LOADED = True
 
 
 def _env(name: str) -> str | None:
@@ -172,6 +187,7 @@ def load_settings(
     transcribe: bool = False,
     whisper_model: str | None = None,
 ) -> Settings:
+    load_environment()
     backend = _default_transcription_backend()
     chosen_model = whisper_model or _env("SUMMARIZER_WHISPER_MODEL")
     resolved_model = resolve_whisper_model(chosen_model, backend)

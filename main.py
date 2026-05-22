@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Backward-compatible entry: run the CLI without an editable install."""
+"""Universal CLI Summarizer — run without an editable install (python main.py)."""
 
 from pathlib import Path
 import sys
