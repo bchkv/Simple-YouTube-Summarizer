@@ -21,8 +21,8 @@ def transcribe_faster_whisper(
     except ImportError as e:
         raise RuntimeError(
             "Local transcription with faster-whisper is not installed. "
-            "Install with: pip install faster-whisper "
-            "or pip install '.[faster-transcribe]'."
+            "Reinstall summarize with pipx install --force . "
+            "or install faster-whisper manually."
         ) from e
 
     size_mb = path.stat().st_size / (1024 * 1024)

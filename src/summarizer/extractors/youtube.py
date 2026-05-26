@@ -115,23 +115,53 @@ def _subtitle_lang_candidates(
     return candidates
 
 
+def _clean_caption_text(text: str) -> str:
+    text = re.sub(r"<\d{2}:\d{2}:\d{2}\.\d+>", "", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    return text.strip()
+
+
+def _token_overlap_size(previous: list[str], current: list[str]) -> int:
+    max_size = min(len(previous), len(current))
+    for size in range(max_size, 0, -1):
+        if previous[-size:] == current[:size]:
+            return size
+    return 0
+
+
 def vtt_to_text(path: str) -> str:
     s = Path(path).read_text(encoding="utf-8", errors="ignore")
+    s = s.replace("\r\n", "\n").replace("\r", "\n")
+    s = re.sub(r"^\ufeff?WEBVTT[^\n]*\n", "", s, count=1)
 
-    s = re.sub(r"^\ufeff?WEBVTT.*?\n\n", "", s, flags=re.DOTALL)
-    s = re.sub(
-        r"^\d{2}:\d{2}:\d{2}\.\d+\s+-->\s+.*$",
-        "",
-        s,
-        flags=re.MULTILINE,
-    )
-    s = re.sub(r"^\d+\s*$", "", s, flags=re.MULTILINE)
-    s = re.sub(r"<[^>]+>", "", s)
-    s = re.sub(r"\n{2,}", "\n", s)
-    s = re.sub(r"[ \t]{2,}", " ", s)
+    parts: list[str] = []
+    previous_tokens: list[str] = []
 
-    lines = [ln.strip() for ln in s.splitlines() if ln.strip()]
-    return "\n".join(lines).strip()
+    for block in re.split(r"\n\s*\n", s):
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        if not lines:
+            continue
+
+        timing_idx = next((i for i, line in enumerate(lines) if "-->" in line), None)
+        if timing_idx is None:
+            continue
+
+        payload = _clean_caption_text(" ".join(lines[timing_idx + 1:]))
+        if not payload:
+            continue
+
+        current_tokens = payload.split()
+        if not current_tokens:
+            continue
+
+        overlap = _token_overlap_size(previous_tokens, current_tokens)
+        new_tokens = current_tokens[overlap:]
+        if new_tokens:
+            parts.append(" ".join(new_tokens))
+        previous_tokens = current_tokens
+
+    return "\n".join(parts).strip()
 
 
 def _find_vtt_file(directory: Path, glob_pattern: str) -> Path | None:

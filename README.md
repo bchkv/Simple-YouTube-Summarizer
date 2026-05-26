@@ -20,8 +20,8 @@ git clone https://github.com/bchkv/Universal-CLI-Summarizer.git
 cd Universal-CLI-Summarizer
 
 pipx install .
-# with optional features (replaces the install above):
-# pipx install '.[faster-transcribe,pdf]'
+# PDF support is optional:
+# pipx install --force '.[pdf]'
 ```
 
 Check:
@@ -41,7 +41,6 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -e .
-pip install -e ".[faster-transcribe]"   # optional: --transcribe
 pip install -e ".[pdf]"                  # optional: PDF files
 ```
 
