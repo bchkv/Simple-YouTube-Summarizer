@@ -80,25 +80,28 @@ For hacking on the repo, you can use a project `.env` instead (`cp .env.example 
 ## Usage
 
 ```bash
-summarize SOURCE [-o FILE] [--transcribe] [-m SIZE] [-q]
+summarize SOURCE [-o FILE] [--transcribe] [-m SIZE] [--transcript] [-q]
 ```
 
 | Flag | Meaning |
 |------|---------|
-| `-o FILE` | Write summary to a file |
+| `-o FILE` | Write output to a file |
 | `--transcribe` | Local Whisper (YouTube: skip captions) |
 | `-m SIZE` | Whisper model: `tiny`, `base`, `small`, `medium`, `large-v3`, `turbo` |
-| `-q` | Only print the summary |
+| `--transcript` | Output the full extracted transcript and skip summarization |
+| `-q` | Only print the final output |
 
 ```bash
 summarize 'https://www.youtube.com/watch?v=...'
 summarize 'https://www.youtube.com/watch?v=...' --transcribe -m small
 summarize podcast.mp3 --transcribe
+summarize 'https://www.youtube.com/watch?v=...' --transcript -o transcript.txt
 summarize paper.pdf -o summary.txt
 summarize notes.md -q
 ```
 
-**Sources:** YouTube captions (`*-orig` by default), local media (with `--transcribe`), PDF (text + OCR), `.txt` / `.md`.
+**Sources:** YouTube captions (`*-orig` by default), local media (with `--transcribe`), PDF (text + OCR), `.txt` / `.md`.  
+Temporary YouTube subtitle files are kept in a temp directory and are not written to your current folder unless you use `-o`.
 
 ## Troubleshooting
 

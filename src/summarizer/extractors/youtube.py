@@ -134,21 +134,14 @@ def vtt_to_text(path: str) -> str:
     return "\n".join(lines).strip()
 
 
-def _cleanup_transcripts(glob_pattern: str) -> None:
-    for p in Path(".").glob(glob_pattern):
-        p.unlink(missing_ok=True)
-
-
-def _find_vtt_file(glob_pattern: str) -> Path | None:
-    candidates = sorted(Path(".").glob(glob_pattern))
+def _find_vtt_file(directory: Path, glob_pattern: str) -> Path | None:
+    candidates = sorted(directory.glob(glob_pattern))
     return candidates[0] if candidates else None
 
 
 def download_subtitles(
-    url: str, lang: str | None, transcript_glob: str
+    url: str, lang: str | None, transcript_glob: str, dest_dir: Path
 ) -> Path | None:
-    _cleanup_transcripts(transcript_glob)
-
     info: dict[str, Any] | None = None
     if not lang:
         try:
@@ -181,7 +174,7 @@ def download_subtitles(
             "writeautomaticsub": True,
             "subtitleslangs": langs,
             "subtitlesformat": "vtt",
-            "outtmpl": "transcript.%(ext)s",
+            "outtmpl": str(dest_dir / "transcript.%(ext)s"),
             "quiet": False,
         }
         try:
@@ -197,7 +190,7 @@ def download_subtitles(
             )
             continue
 
-        vtt = _find_vtt_file(transcript_glob)
+        vtt = _find_vtt_file(dest_dir, transcript_glob)
         if vtt:
             return vtt
 
@@ -257,19 +250,22 @@ class YouTubeExtractor:
                     audio_path.resolve(), self._settings, quiet=quiet
                 )
 
-        vtt_path = download_subtitles(
-            url,
-            self._settings.sub_lang,
-            self._settings.transcript_glob,
-        )
-        if not vtt_path:
-            raise RuntimeError(
-                "Could not fetch subtitles. Try again with --transcribe to use "
-                "on-device speech-to-text, or check that the video has captions."
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            vtt_path = download_subtitles(
+                url,
+                self._settings.sub_lang,
+                self._settings.transcript_glob,
+                tmp_dir,
             )
-        transcript = vtt_to_text(str(vtt_path))
-        if not transcript:
-            raise RuntimeError("Transcript text is empty after cleaning.")
-        if not quiet:
-            print(f"Using subtitles: {vtt_path}", file=sys.stderr)
-        return transcript
+            if not vtt_path:
+                raise RuntimeError(
+                    "Could not fetch subtitles. Try again with --transcribe to use "
+                    "on-device speech-to-text, or check that the video has captions."
+                )
+            transcript = vtt_to_text(str(vtt_path))
+            if not transcript:
+                raise RuntimeError("Transcript text is empty after cleaning.")
+            if not quiet:
+                print("Using downloaded subtitles.", file=sys.stderr)
+            return transcript

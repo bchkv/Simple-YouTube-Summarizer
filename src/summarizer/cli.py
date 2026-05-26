@@ -13,6 +13,16 @@ def _log(message: str, *, quiet: bool) -> None:
         print(message, file=sys.stderr)
 
 
+def _write_output(text: str, output: str | None, *, quiet: bool) -> None:
+    if output is None or output == "-":
+        print(text)
+        return
+
+    out_path = Path(output)
+    out_path.write_text(text, encoding="utf-8")
+    _log(f"Wrote output to: {out_path.resolve()}", quiet=quiet)
+
+
 def _extract_transcript(
     source: str,
     kind: SourceKind,
@@ -56,7 +66,7 @@ def _summarize_main(argv: list[str]) -> int:
         "--output",
         metavar="FILE",
         default=None,
-        help="Write summary to this file instead of stdout",
+        help="Write output to this file instead of stdout",
     )
     parser.add_argument(
         "--transcribe",
@@ -78,15 +88,20 @@ def _summarize_main(argv: list[str]) -> int:
         ),
     )
     parser.add_argument(
+        "--transcript",
+        action="store_true",
+        help="Print the extracted full transcript and skip summarization",
+    )
+    parser.add_argument(
         "-q",
         "--quiet",
         action="store_true",
-        help="Only print the summary (suppress progress logs)",
+        help="Only print the final output (suppress progress logs)",
     )
     args = parser.parse_args(argv)
 
     load_environment()
-    if not api_key_is_set():
+    if not args.transcript and not api_key_is_set():
         print(missing_api_key_message(), file=sys.stderr)
         return 2
 
@@ -130,6 +145,10 @@ def _summarize_main(argv: list[str]) -> int:
         quiet=quiet,
     )
 
+    if args.transcript:
+        _write_output(transcript, args.output, quiet=quiet)
+        return 0
+
     _log(f"Summarizing with {settings.final_model}…", quiet=quiet)
     try:
         summary = summarize_transcript(transcript, settings)
@@ -140,12 +159,7 @@ def _summarize_main(argv: list[str]) -> int:
         print("Summary is empty.", file=sys.stderr)
         return 1
 
-    if args.output is None or args.output == "-":
-        print(summary)
-    else:
-        out_path = Path(args.output)
-        out_path.write_text(summary, encoding="utf-8")
-        _log(f"Wrote summary to: {out_path.resolve()}", quiet=quiet)
+    _write_output(summary, args.output, quiet=quiet)
     return 0
 
 
